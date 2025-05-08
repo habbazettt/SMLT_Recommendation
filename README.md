@@ -103,7 +103,8 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 ### **1. Distribusi Kategori Anime**  
 
-![Distribusi Kategori Anime](https://via.placeholder.com/400x300?text=TV+58.18%25)  
+![Distribusi Kategori Anime](https://github.com/user-attachments/assets/46fabe5c-a3e5-482a-9ea8-88c196fb2e6b)
+
 **Visualisasi**: Diagram lingkaran persentase kategori anime.  
 **Hasil**:  
 
@@ -117,9 +118,10 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 ---
 
-### **2. Distribusi Skor Anime**  
+### **2. Distribusi Skor Anime** 
 
-![Distribusi Skor Anime](https://via.placeholder.com/400x300?text=Skor+6-8)  
+![Distribusi Skor Anime](https://github.com/user-attachments/assets/46c7bad2-0b13-4307-80ec-07ec68544bfa)
+
 **Visualisasi**: Histogram distribusi skor (skala 1-10).  
 **Hasil**:  
 
@@ -133,7 +135,8 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 ### **3. Top 10 Anime Berdasarkan Jumlah Members**  
 
-![Top 10 Members](https://via.placeholder.com/600x400?text=Jujutsu+Kaisen+0)  
+![Top 10 Anime by Members](https://github.com/user-attachments/assets/cdfe213e-3b41-441b-a8ad-e8e8d89df7ae)
+
 **Visualisasi**: Diagram batang horizontal.  
 **Hasil**:  
 
@@ -149,7 +152,8 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 ### **4. Top 10 Anime Berdasarkan Skor**  
 
-![Top 10 Skor](https://via.placeholder.com/600x400?text=Gintama+dominan)  
+![Top 10 Anime by Skor](https://github.com/user-attachments/assets/9eba265c-0da1-4509-ab39-f0f1b67fba6f)
+
 **Visualisasi**: Diagram batang horizontal.  
 **Hasil**:  
 
@@ -165,7 +169,8 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 ### **5. Hubungan Skor vs. Popularitas**  
 
-![Skor vs. Popularitas](https://via.placeholder.com/400x300?text=Tidak+Ada+Korelasi)  
+![Skor vs Popularitas](https://github.com/user-attachments/assets/e1d4a35e-07b4-4039-8eb3-167fa64d68cc)
+
 **Visualisasi**: Scatter plot hubungan skor dan jumlah members.  
 **Hasil**:  
 
@@ -178,7 +183,8 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 ### **6. Distribusi Durasi Episode**  
 
-![Distribusi Durasi Episode](https://via.placeholder.com/400x300?text=Durasi+24+menit)  
+![Distribusi Durasi Eps](https://github.com/user-attachments/assets/1adc4622-8141-46f9-be92-8df17706a012)
+
 **Visualisasi**: Boxplot durasi episode dalam menit.  
 **Hasil**:  
 
@@ -191,25 +197,10 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 ---
 
-### **7. Top 10 Studio Anime**  
+### **7. Top 10 Genre Anime**  
 
-![Top 10 Studio](https://via.placeholder.com/600x400?text=Madhouse+dominasi)  
-**Visualisasi**: Diagram batang jumlah produksi per studio.  
-**Hasil**:  
+![Top 10 Anime by Genre](https://github.com/user-attachments/assets/81875c04-5031-4d70-b2a1-ca281b26ef60)
 
-1. **Madhouse** (Contoh: *Hunter x Hunter*)  
-2. **Sunrise** (Contoh: *Gintama*)  
-3. **Bones** (Contoh: *My Hero Academia*)  
-**Insight**:  
-
-- Studio besar seperti **Madhouse** dan **Sunrise** mendominasi dengan portofolio anime berkualitas tinggi.  
-- Studio seperti **Kyoto Animation** (Contoh: *Clannad*) masuk peringkat bawah karena produksi terbatas.  
-
----
-
-### **8. Top 10 Genre Anime**  
-
-![Top 10 Genre](https://via.placeholder.com/600x400?text=Action+dan+Comedy)  
 **Visualisasi**: Diagram batang horizontal frekuensi genre.  
 **Hasil**:  
 
@@ -228,9 +219,8 @@ Dataset utama yang digunakan bernama `Top_Anime_data.csv`, yang terdiri dari **1
 
 1. **Dominasi Format TV**: 58.18% anime dirilis sebagai TV Series.  
 2. **Kualitas vs. Popularitas**: Skor tinggi tidak menjamin popularitas, dan sebaliknya.  
-3. **Genre Populer**: Action, Comedy, dan Fantasy mendominasi pasar.  
-4. **Studio Teratas**: Madhouse, Sunrise, dan Bones adalah studio paling produktif.  
-5. **Durasi Standar**: 24 menit adalah durasi umum untuk episode TV anime.
+3. **Genre Populer**: Action, Comedy, dan Fantasy mendominasi pasar.   
+4. **Durasi Standar**: 24 menit adalah durasi umum untuk episode TV anime.
 
 Dengan EDA ini, karakteristik dataset anime dapat dipahami secara holistik, dari tren produksi hingga preferensi pengguna! 🎬📊
 
