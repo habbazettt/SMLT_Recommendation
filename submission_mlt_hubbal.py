@@ -113,7 +113,6 @@ Kolom datasets anime memiliki informasi berikut:
 ### Visualisasi
 """
 
-# Hitung jumlah anime untuk setiap kategori
 ona = df.loc[df['Type'] == 'ONA'].shape[0]
 tv = df.loc[df['Type'] == 'TV'].shape[0]
 movie = df.loc[df['Type'] == 'Movie'].shape[0]
@@ -121,11 +120,9 @@ music = df.loc[df['Type'] == 'Music'].shape[0]
 special = df.loc[df['Type'] == 'Special'].shape[0]
 ova = df.loc[df['Type'] == 'OVA'].shape[0]
 
-# Label dan warna untuk setiap kategori
 labels = ['ONA', 'TV', 'Movie', 'Music', 'Special', 'OVA']
 colors = ['#81F4E1', '#56CBF9', '#F5D491', '#BEB7A4', '#B4E1FF', '#F06C9B']
 
-# Buat pie chart
 plt.figure(figsize=(10, 7))
 plt.title('Distribusi Kategori Anime')
 plt.pie([ona, tv, movie, music, special, ova],
@@ -187,23 +184,57 @@ plt.title("Top 10 Anime Berdasarkan Skor", fontdict={'fontsize': 20})
 plt.tight_layout()
 plt.show()
 
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x='Score', y='Members', data=df, alpha=0.6, color='#87255B')
+plt.title('Skor vs. Popularitas', fontsize=14)
+plt.xlabel('Skor', fontsize=12)
+plt.ylabel('Jumlah Members', fontsize=12)
+plt.show()
+
+# Ekstrak durasi dalam menit (contoh: '24 min per ep' -> 24)
+df['Duration_min'] = df['Duration'].str.extract('(\d+)').astype(float)
+
+plt.figure(figsize=(10, 6))
+sns.boxplot(x='Duration_min', data=df, color='#81F4E1')
+plt.title('Distribusi Durasi Episode', fontsize=14)
+plt.xlabel('Durasi (menit)', fontsize=12)
+plt.show()
+
+top_studios = df['Studios'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+top_studios.plot(kind='bar', color='#C57B57')
+plt.title('Top 10 Studio Anime Berdasarkan Jumlah Produksi', fontsize=14)
+plt.xlabel('Studio', fontsize=12)
+plt.ylabel('Jumlah Anime', fontsize=12)
+plt.xticks(rotation=45)
+plt.show()
+
+# Hitung frekuensi genre
+all_genres = df['Genres'].str.split(', ').explode()
+genre_counts = all_genres.value_counts().head(10)
+
+# Plot
+plt.figure(figsize=(12, 6))
+genre_counts.plot(kind='barh', color='#C57B57')
+plt.title('Top 10 Genre Anime', fontsize=14)
+plt.xlabel('Jumlah Anime')
+plt.gca().invert_yaxis()
+plt.show()
+
 """## Data Preparation"""
 
 def clean_anime_title(text):
-    if pd.isna(text):  # Handle missing values
+    if pd.isna(text):
         return ""
 
-    # Hapus URL
     text = re.sub(r"https?://\S+|www\.\S+", "", text)
 
-    # Hapus karakter non-alfanumerik kecuali apostrof, tanda hubung, dan spasi
     text = re.sub(r"[^a-zA-Z0-9'\- ]", "", text)
 
-    # Hapus spasi berlebih
     text = re.sub(r"\s+", " ", text).strip()
 
     return text
-# Eksekusi pembersihan dan buat kolom baru
 df['English_clean'] = df['English'].apply(clean_anime_title)
 
 def clean_genres(genre_text):
@@ -222,7 +253,7 @@ def clean_genres(genre_text):
 
         cleaned_genres.add(genre.lower())
 
-    return ", ".join(sorted(cleaned_genres))  # sorted biar konsisten
+    return ", ".join(sorted(cleaned_genres))
 
 df['Genres_clean'] = df['Genres'].apply(clean_genres)
 
@@ -247,12 +278,6 @@ print("After:", df['Studios_clean'].iloc[0])
 print(df[['English', 'English_clean']].sample(3))
 print(df[['Genres', 'Genres_clean']].sample(3))
 print(df[['Studios', 'Studios_clean']].sample(3))
-
-"""Membersihkan judul anime dengan:
-1. Menghapus URL (jika ada).
-2. Menghapus karakter khusus kecuali apostrof (`'`), tanda hubung (`-`), dan spasi.
-3. Menghapus spasi berlebih.
-"""
 
 df
 
@@ -308,7 +333,8 @@ data = df.drop(columns=[
     'Licensors',
     'Source',
     'Duration',
-    'Demographic'
+    'Demographic',
+    'Studios'
 ])
 
 """Mengahapus kolom yang tidak dibutuhkan pada model kali ini."""
@@ -358,6 +384,92 @@ data[data.English_clean.eq('One Piece')]
 
 anime_recommendations('One Piece')
 
+"""### Evaluation Model TF-IDF"""
+
+def evaluate_tfidf_genre_similarity(anime_name: str, top_k: int = 5):
+    """Evaluasi kesamaan genre untuk rekomendasi model TF-IDF"""
+    try:
+        # Dapatkan rekomendasi
+        recommendations = anime_recommendations(anime_name, k=top_k)
+
+        if recommendations.empty:
+            return f"⚠️ Tidak ada rekomendasi untuk '{anime_name}'"
+
+        # Ambil genre asli
+        original_genres = set(data.loc[data['English_clean'] == anime_name, 'Genres_clean'].iloc[0].lower().split(', '))
+
+        # Hitung similarity score
+        similarity_scores = []
+        for _, row in recommendations.iterrows():
+            rec_genres = set(row['Genres_clean'].lower().split(', '))
+            intersection = original_genres & rec_genres
+            similarity = len(intersection)/len(original_genres) if original_genres else 0
+            similarity_scores.append(round(similarity * 100, 2))
+
+        recommendations['Genre Similarity (%)'] = similarity_scores
+        mean_score = round(np.mean(similarity_scores), 2)
+
+        print(f"🎯 Hasil evaluasi untuk '{anime_name}':")
+        print(f"📊 Rata-rata kesamaan genre: {mean_score}%")
+        return recommendations
+
+    except KeyError:
+        return f"❌ Anime '{anime_name}' tidak ditemukan"
+
+def batch_evaluate_tfidf(sample_size=10, top_k=5):
+    """Evaluasi batch untuk sampel acak"""
+    sampled_anime = data.sample(sample_size, random_state=42)['English_clean']
+    total_scores = []
+
+    print("\n🔬 Evaluasi Batch Model TF-IDF 🔬")
+    print(f"📋 Jumlah sampel: {sample_size}")
+    print("===================================\n")
+
+    for anime in sampled_anime:
+        result = evaluate_tfidf_genre_similarity(anime, top_k)
+        if isinstance(result, pd.DataFrame):
+            avg_score = result['Genre Similarity (%)'].mean()
+            total_scores.append(avg_score)
+            print(f"▸ {anime}: {avg_score}%")
+
+    overall_score = round(np.mean(total_scores), 2)
+    print(f"\n📈 Skor keseluruhan: {overall_score}%")
+    return overall_score
+
+def visualize_tfidf_performance(sample_size=10, top_k=5):
+    """Visualisasi hasil evaluasi"""
+    sampled_anime = data.sample(sample_size, random_state=42)['English_clean']
+    scores = []
+    names = []
+
+    for anime in sampled_anime:
+        result = evaluate_tfidf_genre_similarity(anime, top_k)
+        if isinstance(result, pd.DataFrame):
+            avg_score = result['Genre Similarity (%)'].mean()
+            scores.append(avg_score)
+            names.append(anime)
+
+    plt.figure(figsize=(12,8))
+    plt.barh(names, scores, color='#FF6F61')
+    plt.title('🎯 Performa Model TF-IDF (Kesamaan Genre)', pad=20)
+    plt.xlabel('Skor Kesamaan (%)')
+    plt.ylabel('Anime')
+    plt.xlim(0, 100)
+    plt.gca().invert_yaxis()
+
+    # Tambah label nilai
+    for i, v in enumerate(scores):
+        plt.text(v + 1, i, f"{v}%", color='black', ha='left', va='center')
+
+    plt.grid(axis='x', alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+# Contoh penggunaan
+evaluate_tfidf_genre_similarity("One Piece")
+batch_evaluate_tfidf()
+visualize_tfidf_performance()
+
 """Sistem telah berhasil merekomendasikan top 5 persen anime yang mirip dengan *One Piece*, yaitu beberapa film dan seri dari *One Piece* itu sendiri. Jadi, jika pengguna menyukai *One Piece*, maka sistem dapat merekomendasikan seri atau movie *One Piece* lainnya.
 
 ### Model K-Nearest Neighbor
@@ -368,58 +480,118 @@ animedf_name.head()
 
 data.set_index('English_clean',inplace=True)
 
-data_n = data[['Genres_clean', 'Type', 'Studios']]
+data_n = data[['Genres_clean', 'Type', 'Studios_clean']]
 
-data_features = pd.get_dummies(data_n[['Type', 'Studios']])
+data_features = pd.get_dummies(data_n[['Type', 'Studios_clean']])
 data_features.index = data.index
 
 model = NearestNeighbors(metric='euclidean')
 model.fit(data_features)
 
-def Recommended_model(anime_name: str, recommend_anime: int = 5):
+"""### Evaluation Model KNN"""
+
+def recommend(anime_name: str, top_k: int = 5):
     if anime_name not in data_features.index:
         return f"❌ Anime '{anime_name}' tidak ditemukan dalam data."
 
-    print(f"✅ Apabila pengguna menyukai anime: {anime_name}")
-    print(f"📌 Berikut ini adalah {recommend_anime} anime yang mungkin juga disukai:")
+    distances, indices = model.kneighbors(data_features.loc[[anime_name]], n_neighbors=top_k + 1)
 
-    # Cari tetangga terdekat
-    distances, neighbors = model.kneighbors(
-        data_features.loc[[anime_name]], n_neighbors=recommend_anime + 1
-    )
+    recommendations = []
+    for idx, dist in zip(indices[0][1:], distances[0][1:]):  # Skip anime itu sendiri
+        recommendations.append({
+            "Anime Name": data_features.index[idx],
+            "Distance": dist,
+            "Similarity Score": f"{round(100 - dist, 2)}%"
+        })
 
-    similar_anime = []
-    similar_distance = []
+    return pd.DataFrame(recommendations)
 
-    for idx, distance in zip(neighbors[0][1:], distances[0][1:]):  # skip self
-        similar_anime.append(data_features.index[idx])
-        similar_distance.append(f"{round(100 - distance, 2)}%")
+# Fungsi Evaluasi Genre Similarity
+def evaluate_genre_similarity(anime_name: str, top_k: int = 5):
+    result = recommend(anime_name, top_k=top_k)
 
-    return pd.DataFrame({
-        "Anime Name": similar_anime,
-        "Similarity Score": similar_distance
-    })
-
-Recommended_model(animedf_name.iloc[21]['English_clean'])
-
-"""## Evaluation"""
-
-def evaluate_recommendation(anime_name: str, top_n: int = 5):
-    recommendations = Recommended_model(anime_name, recommend_anime=top_n)
-
-    if isinstance(recommendations, str):
-        return recommendations
+    if isinstance(result, str):
+        return result
 
     original_genres = set(str(data.loc[anime_name, 'Genres_clean']).lower().split())
 
-    genre_matches = []
-    for rec_name in recommendations['Anime Name']:
+    genre_similarities = []
+    for rec_name in result['Anime Name']:
         rec_genres = set(str(data.loc[rec_name, 'Genres_clean']).lower().split())
         intersection = original_genres & rec_genres
         similarity_score = len(intersection) / len(original_genres) if original_genres else 0
-        genre_matches.append(f"{round(similarity_score * 100, 2)}%")
+        genre_similarities.append(round(similarity_score * 100, 2))
 
-    recommendations['Genre Similarity'] = genre_matches
-    return recommendations
+    result['Genre Similarity (%)'] = genre_similarities
+    mean_similarity = round(np.mean(genre_similarities), 2)
 
-evaluate_recommendation("Gintama", top_n=10)
+    print(f"📊 Rata-rata genre similarity untuk '{anime_name}' adalah {mean_similarity}%")
+    return result
+
+evaluate_genre_similarity("One Piece", top_k=5)
+
+def batch_genre_similarity_evaluation(sample_size=10, top_k=5):
+    sampled_anime = data_features.sample(n=sample_size, random_state=42).index
+    similarity_scores = []
+
+    print(f"🎯 Evaluasi {sample_size} anime secara acak:\n")
+
+    for anime_name in sampled_anime:
+        print(f"🔍 {anime_name}")
+        result = recommend(anime_name, top_k=top_k)
+
+        if isinstance(result, str):
+            print(result)
+            continue
+
+        original_genres = set(str(data.loc[anime_name, 'Genres_clean']).lower().split())
+        scores = []
+        for rec_name in result['Anime Name']:
+            rec_genres = set(str(data.loc[rec_name, 'Genres_clean']).lower().split())
+            intersection = original_genres & rec_genres
+            similarity_score = len(intersection) / len(original_genres) if original_genres else 0
+            scores.append(similarity_score)
+
+        avg_score = round(np.mean(scores) * 100, 2)
+        print(f"   ⮑ Rata-rata genre similarity: {avg_score}%\n")
+        similarity_scores.append(avg_score)
+
+    overall_score = round(np.mean(similarity_scores), 2)
+    print(f"📈 Rata-rata genre similarity keseluruhan: {overall_score}%")
+    return overall_score
+
+batch_genre_similarity_evaluation(sample_size=10, top_k=5)
+
+def batch_genre_similarity_plot(sample_size=10, top_k=5):
+    sampled_anime = data_features.sample(n=sample_size, random_state=42).index
+    anime_names = []
+    average_scores = []
+
+    for anime_name in sampled_anime:
+        result = recommend(anime_name, top_k=top_k)
+        if isinstance(result, str):
+            continue
+
+        original_genres = set(str(data.loc[anime_name, 'Genres_clean']).lower().split())
+        scores = []
+        for rec_name in result['Anime Name']:
+            rec_genres = set(str(data.loc[rec_name, 'Genres_clean']).lower().split())
+            intersection = original_genres & rec_genres
+            similarity_score = len(intersection) / len(original_genres) if original_genres else 0
+            scores.append(similarity_score)
+
+        avg_score = round(np.mean(scores) * 100, 2)
+        anime_names.append(anime_name)
+        average_scores.append(avg_score)
+
+    plt.figure(figsize=(12, 6))
+    bars = plt.barh(anime_names, average_scores, color='skyblue')
+    plt.xlabel("Genre Similarity (%)")
+    plt.title(f"📊 Genre Similarity Rata-rata untuk {sample_size} Anime")
+    plt.gca().invert_yaxis()  # Anime terbaru di atas
+    for bar, score in zip(bars, average_scores):
+        plt.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, f"{score}%", va='center')
+    plt.tight_layout()
+    plt.show()
+
+batch_genre_similarity_plot(sample_size=10, top_k=5)
