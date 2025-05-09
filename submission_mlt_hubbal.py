@@ -19,10 +19,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import calinski_harabasz_score, davies_bouldin_score
+from scipy.sparse import hstack
 import re
+from sklearn.preprocessing import StandardScaler
 
 """Download Dataset"""
 
@@ -227,57 +230,35 @@ plt.show()
 def clean_anime_title(text):
     if pd.isna(text):
         return ""
-
-    text = re.sub(r"https?://\S+|www\.\S+", "", text)
-
-    text = re.sub(r"[^a-zA-Z0-9'\- ]", "", text)
-
-    text = re.sub(r"\s+", " ", text).strip()
-
+    text = re.sub(r"https?://\S+|www\.\S+", "", text)  # hapus URL
+    text = re.sub(r"[^a-zA-Z0-9'\- ]", "", text)       # hapus karakter non-alfanumerik kecuali tanda kutip dan tanda hubung
+    text = re.sub(r"\s+", " ", text).strip()           # normalisasi spasi
     return text
-df['English_clean'] = df['English'].apply(clean_anime_title)
+
+df['English'] = df['English'].apply(clean_anime_title)
 
 def clean_genres(genre_text):
     if pd.isna(genre_text):
         return ""
-
     raw_genres = genre_text.split(',')
     cleaned_genres = set()
-
     for genre in raw_genres:
         genre = genre.strip()
         half = len(genre) // 2
-
         if len(genre) % 2 == 0 and genre[:half].lower() == genre[half:].lower():
-            genre = genre[:half]
-
+            genre = genre[:half]  # deteksi pengulangan
         cleaned_genres.add(genre.lower())
-
     return ", ".join(sorted(cleaned_genres))
 
-df['Genres_clean'] = df['Genres'].apply(clean_genres)
+df['Genres'] = df['Genres'].apply(clean_genres)
 
 def clean_studios(studio_str):
     if pd.isna(studio_str):
         return ""
-
     studios = [s.strip().lower() for s in studio_str.split(",") if s.strip()]
     return ", ".join(sorted(set(studios)))
 
-df["Studios_clean"] = df["Studios"].apply(clean_studios)
-
-print("Before:", df['Genres'].iloc[0])
-print("After:", df['Genres_clean'].iloc[0])
-
-print("Before:", df['English'].iloc[0])
-print("After:", df['English_clean'].iloc[0])
-
-print("Before:", df['Studios'].iloc[0])
-print("After:", df['Studios_clean'].iloc[0])
-
-print(df[['English', 'English_clean']].sample(3))
-print(df[['Genres', 'Genres_clean']].sample(3))
-print(df[['Studios', 'Studios_clean']].sample(3))
+df['Studios'] = df['Studios'].apply(clean_studios)
 
 df
 
@@ -289,7 +270,7 @@ df.isnull().sum()
 
 """Terdapat *Missing value* pada kolom `sypnopsis, Japanese, English, Premiered, Broadcast, Genres dan Demographic`"""
 
-df = df.dropna()
+df.dropna()
 
 """Menghapus data *Missing value*"""
 
@@ -308,290 +289,159 @@ df.describe().T
 - `25%` adalah kuartil pertama. Kuartil adalah nilai yang menandai batas interval dalam empat bagian sebaran yang sama.
 - `50%` adalah kuartil kedua, atau biasa juga disebut median (nilai tengah). - 75% adalah kuartil ketiga.
 - `Max` adalah nilai maksimum.
-
-## Model Development
 """
 
-df
+# Convert numerical columns to numeric
+df['Episodes'] = pd.to_numeric(df['Episodes'], errors='coerce')
+df['Episodes'] = df['Episodes'].fillna(df['Episodes'].median())
 
-data = df.drop(columns=[
-    'Score',
-    'Popularity',
-    'Rank',
-    'Members',
-    'Description',
-    'Synonyms',
-    'Japanese',
-    'English',
-    'Genres',
-    'Episodes',
-    'Status',
-    'Aired',
-    'Premiered',
-    'Broadcast',
-    'Producers',
-    'Licensors',
-    'Source',
-    'Duration',
-    'Demographic',
-    'Studios'
-])
+# One-Hot Encoding for categorical features
+categorical_cols = ['Type', 'Status', 'Source', 'Rating']
+df_encoded = pd.get_dummies(df[categorical_cols], drop_first=True)
 
-"""Mengahapus kolom yang tidak dibutuhkan pada model kali ini."""
+# Prepare numerical features
+numeric_features = df[['Score', 'Members', 'Popularity', 'Rank', 'Episodes']]
+scaler = StandardScaler()
+scaled_numeric = scaler.fit_transform(numeric_features)
 
-data
+# Feature Extraction with TF-IDF
+tfidf_title = TfidfVectorizer(max_features=300)
+title_tfidf = tfidf_title.fit_transform(df['English'])
+tfidf_genre = TfidfVectorizer(max_features=100)
+genre_tfidf = tfidf_genre.fit_transform(df['Genres'])
+tfidf_studio = TfidfVectorizer(max_features=50)
+studio_tfidf = tfidf_studio.fit_transform(df['Studios'])
 
-"""### Model Content Based Filtering (dengan Filter Genres)"""
+# Combine TF-IDF features
+tfidf_features = hstack([title_tfidf, genre_tfidf, studio_tfidf])
 
-tfid = TfidfVectorizer()
-tfid.fit(data['Genres_clean'])
+# Combine all features
+all_features = hstack([tfidf_features, scaled_numeric])
 
-tfid.get_feature_names_out()
+"""## Model Development
 
-tfidf_matrix = tfid.fit_transform(data['Genres_clean'])
-
-tfidf_matrix.shape
-
-tfidf_matrix.todense()
-
-pd.DataFrame(
-    tfidf_matrix.todense(),
-    columns=tfid.get_feature_names_out(),
-    index=data.Genres_clean
-).sample(22, axis=1).sample(10, axis=0)
-
-"""Output `matriks tf-idf` di atas menunjukkan hubungan antara nama anime terhadap kategori yang dipilih. Matriks ini menunjukkan seberapa besar korelasi antara Anime terhadap kategori yang dipilih."""
-
-cosine_sim = cosine_similarity(tfidf_matrix)
-cosine_sim
-
-cosine_sim_df = pd.DataFrame(cosine_sim, index=data['English_clean'], columns=data['English_clean'])
-print('Shape:', cosine_sim_df.shape)
-
-cosine_sim_df.sample(5, axis=1).sample(5, axis=0)
-
-def anime_recommendations(anime_name, similarity_data=cosine_sim_df, items=data[['English_clean','Genres_clean']], k=5):
-
-    index = similarity_data.loc[:,anime_name].to_numpy().argpartition(
-        range(-1, -k, -1))
-
-    closest = similarity_data.columns[index[-1:-(k+2):-1]]
-    closest = closest.drop(anime_name, errors='ignore')
-
-    return pd.DataFrame(closest).merge(items).head(k)
-
-data[data.English_clean.eq('One Piece')]
-
-anime_recommendations('One Piece')
-
-"""### Evaluation Model TF-IDF"""
-
-def evaluate_tfidf_genre_similarity(anime_name: str, top_k: int = 5):
-    """Evaluasi kesamaan genre untuk rekomendasi model TF-IDF"""
-    try:
-        # Dapatkan rekomendasi
-        recommendations = anime_recommendations(anime_name, k=top_k)
-
-        if recommendations.empty:
-            return f"⚠️ Tidak ada rekomendasi untuk '{anime_name}'"
-
-        # Ambil genre asli
-        original_genres = set(data.loc[data['English_clean'] == anime_name, 'Genres_clean'].iloc[0].lower().split(', '))
-
-        # Hitung similarity score
-        similarity_scores = []
-        for _, row in recommendations.iterrows():
-            rec_genres = set(row['Genres_clean'].lower().split(', '))
-            intersection = original_genres & rec_genres
-            similarity = len(intersection)/len(original_genres) if original_genres else 0
-            similarity_scores.append(round(similarity * 100, 2))
-
-        recommendations['Genre Similarity (%)'] = similarity_scores
-        mean_score = round(np.mean(similarity_scores), 2)
-
-        print(f"🎯 Hasil evaluasi untuk '{anime_name}':")
-        print(f"📊 Rata-rata kesamaan genre: {mean_score}%")
-        return recommendations
-
-    except KeyError:
-        return f"❌ Anime '{anime_name}' tidak ditemukan"
-
-def batch_evaluate_tfidf(sample_size=10, top_k=5):
-    """Evaluasi batch untuk sampel acak"""
-    sampled_anime = data.sample(sample_size, random_state=42)['English_clean']
-    total_scores = []
-
-    print("\n🔬 Evaluasi Batch Model TF-IDF 🔬")
-    print(f"📋 Jumlah sampel: {sample_size}")
-    print("===================================\n")
-
-    for anime in sampled_anime:
-        result = evaluate_tfidf_genre_similarity(anime, top_k)
-        if isinstance(result, pd.DataFrame):
-            avg_score = result['Genre Similarity (%)'].mean()
-            total_scores.append(avg_score)
-            print(f"▸ {anime}: {avg_score}%")
-
-    overall_score = round(np.mean(total_scores), 2)
-    print(f"\n📈 Skor keseluruhan: {overall_score}%")
-    return overall_score
-
-def visualize_tfidf_performance(sample_size=10, top_k=5):
-    """Visualisasi hasil evaluasi"""
-    sampled_anime = data.sample(sample_size, random_state=42)['English_clean']
-    scores = []
-    names = []
-
-    for anime in sampled_anime:
-        result = evaluate_tfidf_genre_similarity(anime, top_k)
-        if isinstance(result, pd.DataFrame):
-            avg_score = result['Genre Similarity (%)'].mean()
-            scores.append(avg_score)
-            names.append(anime)
-
-    plt.figure(figsize=(12,8))
-    plt.barh(names, scores, color='#FF6F61')
-    plt.title('🎯 Performa Model TF-IDF (Kesamaan Genre)', pad=20)
-    plt.xlabel('Skor Kesamaan (%)')
-    plt.ylabel('Anime')
-    plt.xlim(0, 100)
-    plt.gca().invert_yaxis()
-
-    # Tambah label nilai
-    for i, v in enumerate(scores):
-        plt.text(v + 1, i, f"{v}%", color='black', ha='left', va='center')
-
-    plt.grid(axis='x', alpha=0.3)
-    plt.tight_layout()
-    plt.show()
-
-# Contoh penggunaan
-evaluate_tfidf_genre_similarity("One Piece")
-batch_evaluate_tfidf()
-visualize_tfidf_performance()
-
-"""Sistem telah berhasil merekomendasikan top 5 persen anime yang mirip dengan *One Piece*, yaitu beberapa film dan seri dari *One Piece* itu sendiri. Jadi, jika pengguna menyukai *One Piece*, maka sistem dapat merekomendasikan seri atau movie *One Piece* lainnya.
-
-### Model K-Nearest Neighbor
+### Model Cosine Similarity Recommendation
 """
 
-animedf_name = pd.DataFrame({'English_clean': data['English_clean']})
-animedf_name.head()
+# Hitung matriks similaritas
+cosine_sim = cosine_similarity(all_features, dense_output=False)
 
-data.set_index('English_clean',inplace=True)
+def cosine_recommender(anime_index, n_recommend=5):
+    # Dapatkan skor similaritas untuk anime target
+    sim_scores = list(enumerate(cosine_sim[anime_index].toarray().flatten()))
 
-data_n = data[['Genres_clean', 'Type', 'Studios_clean']]
+    # Urutkan berdasarkan skor tertinggi
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
 
-data_features = pd.get_dummies(data_n[['Type', 'Studios_clean']])
-data_features.index = data.index
+    # Ambil n_recommend + 1 (karena termasuk diri sendiri)
+    sim_scores = sim_scores[1:n_recommend+1]  # Exclude itself
 
-model = NearestNeighbors(metric='euclidean')
-model.fit(data_features)
+    # Dapatkan indeks anime yang direkomendasikan
+    anime_indices = [i[0] for i in sim_scores]
 
-"""### Evaluation Model KNN"""
+    # Return dataframe rekomendasi
+    recommendations = df.iloc[anime_indices][['English', 'Score', 'Genres', 'Type', 'Studios']]
+    recommendations['Similarity Score'] = [i[1] for i in sim_scores]
 
-def recommend(anime_name: str, top_k: int = 5):
-    if anime_name not in data_features.index:
-        return f"❌ Anime '{anime_name}' tidak ditemukan dalam data."
+    return recommendations
 
-    distances, indices = model.kneighbors(data_features.loc[[anime_name]], n_neighbors=top_k + 1)
+cosine_recommender(anime_index = 10, n_recommend=5)
 
-    recommendations = []
-    for idx, dist in zip(indices[0][1:], distances[0][1:]):  # Skip anime itu sendiri
-        recommendations.append({
-            "Anime Name": data_features.index[idx],
-            "Distance": dist,
-            "Similarity Score": f"{round(100 - dist, 2)}%"
-        })
+"""### Model KNN"""
 
-    return pd.DataFrame(recommendations)
+# Bangun model KNN dengan metrik cosine
+knn_model = NearestNeighbors(
+    n_neighbors=6,
+    metric='cosine',
+    algorithm='brute'
+)
 
-# Fungsi Evaluasi Genre Similarity
-def evaluate_genre_similarity(anime_name: str, top_k: int = 5):
-    result = recommend(anime_name, top_k=top_k)
+# Latih model dengan data features gabungan
+knn_model.fit(all_features)
 
-    if isinstance(result, str):
-        return result
+def knn_recommender(anime_index, n_recommend=5):
+    # Mengonversi sparse matrix ke array
+    all_features_array = all_features.toarray()
 
-    original_genres = set(str(data.loc[anime_name, 'Genres_clean']).lower().split())
+    # Dapatkan query (anime target)
+    query = all_features_array[anime_index].reshape(1, -1)  # Mengubah bentuk menjadi 2D
 
-    genre_similarities = []
-    for rec_name in result['Anime Name']:
-        rec_genres = set(str(data.loc[rec_name, 'Genres_clean']).lower().split())
-        intersection = original_genres & rec_genres
-        similarity_score = len(intersection) / len(original_genres) if original_genres else 0
-        genre_similarities.append(round(similarity_score * 100, 2))
+    # Cari anime terdekat
+    distances, indices = knn_model.kneighbors(query, n_neighbors=n_recommend+1)
 
-    result['Genre Similarity (%)'] = genre_similarities
-    mean_similarity = round(np.mean(genre_similarities), 2)
+    # Exclude diri sendiri
+    indices = indices.flatten()[1:]
+    distances = distances.flatten()[1:]
 
-    print(f"📊 Rata-rata genre similarity untuk '{anime_name}' adalah {mean_similarity}%")
-    return result
+    # Return dataframe rekomendasi
+    recommendations = df.iloc[indices][['English', 'Score', 'Genres', 'Type', 'Studios']]
+    recommendations['Distance Score'] = 1 - distances  # Convert ke similarity score
 
-evaluate_genre_similarity("One Piece", top_k=5)
+    return recommendations
 
-def batch_genre_similarity_evaluation(sample_size=10, top_k=5):
-    sampled_anime = data_features.sample(n=sample_size, random_state=42).index
-    similarity_scores = []
+knn_recommender(anime_index = 10, n_recommend=5)
 
-    print(f"🎯 Evaluasi {sample_size} anime secara acak:\n")
+"""## Evaluation"""
 
-    for anime_name in sampled_anime:
-        print(f"🔍 {anime_name}")
-        result = recommend(anime_name, top_k=top_k)
+def evaluate_recommendations(true_recommendations, predicted_recommendations):
+    # Mengonversi ke set untuk perbandingan
+    true_set = set(true_recommendations)
+    predicted_set = set(predicted_recommendations)
 
-        if isinstance(result, str):
-            print(result)
-            continue
+    # Hitung True Positives, False Positives, dan False Negatives
+    true_positives = len(true_set.intersection(predicted_set))
+    false_positives = len(predicted_set - true_set)
+    false_negatives = len(true_set - predicted_set)
 
-        original_genres = set(str(data.loc[anime_name, 'Genres_clean']).lower().split())
-        scores = []
-        for rec_name in result['Anime Name']:
-            rec_genres = set(str(data.loc[rec_name, 'Genres_clean']).lower().split())
-            intersection = original_genres & rec_genres
-            similarity_score = len(intersection) / len(original_genres) if original_genres else 0
-            scores.append(similarity_score)
+    # Hitung Precision, Recall, dan F1 Score
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
-        avg_score = round(np.mean(scores) * 100, 2)
-        print(f"   ⮑ Rata-rata genre similarity: {avg_score}%\n")
-        similarity_scores.append(avg_score)
+    return {
+        'Precision': precision,
+        'Recall': recall,
+        'F1 Score': f1
+    }
 
-    overall_score = round(np.mean(similarity_scores), 2)
-    print(f"📈 Rata-rata genre similarity keseluruhan: {overall_score}%")
-    return overall_score
+# Ambil anime target berdasarkan indeks
+target_index = 0
+anime_target = df.iloc[target_index][['English', 'Score', 'Genres', 'Type', 'Studios']]
 
-batch_genre_similarity_evaluation(sample_size=10, top_k=5)
+# Cetak informasi anime target
+print("🎯 Anime Target:")
+print("-"*50)
+print(f"Judul: {anime_target['English']}")
+print(f"Genre: {anime_target['Genres']}")
+print(f"Studio: {anime_target['Studios']}")
+print(f"Tipe: {anime_target['Type']}")
+print(f"Skor: {anime_target['Score']}\n")
 
-def batch_genre_similarity_plot(sample_size=10, top_k=5):
-    sampled_anime = data_features.sample(n=sample_size, random_state=42).index
-    anime_names = []
-    average_scores = []
+# Ambil rekomendasi dari kedua model
+cosine_recommendations = cosine_recommender(target_index)['English'].tolist()
+knn_recommendations = knn_recommender(target_index)['English'].tolist()
 
-    for anime_name in sampled_anime:
-        result = recommend(anime_name, top_k=top_k)
-        if isinstance(result, str):
-            continue
+# Cetak rekomendasi yang dihasilkan
+print("Rekomendasi Cosine Similarity:", cosine_recommendations)
+print("Rekomendasi KNN:", knn_recommendations)
 
-        original_genres = set(str(data.loc[anime_name, 'Genres_clean']).lower().split())
-        scores = []
-        for rec_name in result['Anime Name']:
-            rec_genres = set(str(data.loc[rec_name, 'Genres_clean']).lower().split())
-            intersection = original_genres & rec_genres
-            similarity_score = len(intersection) / len(original_genres) if original_genres else 0
-            scores.append(similarity_score)
+# Contoh ground truth yang diperbarui
+true_recommendations = ['Bleach Thousand-Year Blood War', 'Fighting Spirit', 'Gintama Season 4', 'Gintama Season 2', 'Odd Taxi']
 
-        avg_score = round(np.mean(scores) * 100, 2)
-        anime_names.append(anime_name)
-        average_scores.append(avg_score)
+# Cetak ground truth
+print("Ground Truth:", true_recommendations)
 
-    plt.figure(figsize=(12, 6))
-    bars = plt.barh(anime_names, average_scores, color='skyblue')
-    plt.xlabel("Genre Similarity (%)")
-    plt.title(f"📊 Genre Similarity Rata-rata untuk {sample_size} Anime")
-    plt.gca().invert_yaxis()  # Anime terbaru di atas
-    for bar, score in zip(bars, average_scores):
-        plt.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, f"{score}%", va='center')
-    plt.tight_layout()
-    plt.show()
+# Evaluasi rekomendasi
+cosine_evaluation_results = evaluate_recommendations(true_recommendations, cosine_recommendations)
+knn_evaluation_results = evaluate_recommendations(true_recommendations, knn_recommendations)
 
-batch_genre_similarity_plot(sample_size=10, top_k=5)
+# Cetak hasil evaluasi
+print("\n📊 Hasil Evaluasi Rekomendasi Cosine Similarity 📊")
+print(f"Precision: {cosine_evaluation_results['Precision']:.2f}")
+print(f"Recall: {cosine_evaluation_results['Recall']:.2f}")
+print(f"F1 Score: {cosine_evaluation_results['F1 Score']:.2f}")
+
+print("\n📊 Hasil Evaluasi Rekomendasi KNN 📊")
+print(f"Precision: {knn_evaluation_results['Precision']:.2f}")
+print(f"Recall: {knn_evaluation_results['Recall']:.2f}")
+print(f"F1 Score: {knn_evaluation_results['F1 Score']:.2f}")
